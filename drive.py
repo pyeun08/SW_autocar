@@ -77,6 +77,7 @@ def start():
 
     ang = 0
     spd = 0
+    basic_spd = 25
     cone_cnt = 0
     angle_increment = 12
     min_left, max_left = 10, 55
@@ -85,6 +86,8 @@ def start():
     min_front_dist = 10
     green_light = False
     lane_left = True
+    lane_change = False
+    lc_done = False
     cone_start = False
     cone_done = False
 
@@ -98,7 +101,7 @@ def start():
     # lane_left -> 차선이 왼쪽이면 True
     # cone_done -> traffic cone 회피를 끝냈으면 True
     #=========================================
-
+    
     while not rospy.is_shutdown():
         height, width, _ = image.shape
 
@@ -114,7 +117,7 @@ def start():
 
             if cv2.countNonZero(green_mask) > 500:
                 green_light = True
-                rospy.loginfo("🔵 파란불 감지 - 출발!")
+                rospy.loginfo("출발 신호 감지 - 출발!")
 
         else:
             # 노란 점선 마스크
@@ -128,10 +131,23 @@ def start():
             white_mask = cv2.inRange(hsv, white_lower, white_upper)
 
             center_image = width // 2
-            spd = 25.0
+            spd = basic_spd
 
             M_yellow = cv2.moments(yellow_mask)
 
+            if lane_change:
+                if lane_before != lane_left:
+                    lane_change = False
+                    lc_done = True
+                
+                if lane_change:
+                    lane_before = lane_left
+                    spd *= 1.7
+
+                    if lane_left:
+                        ang = 55
+                    else: 
+                        ang = -55
 
             if M_yellow['m00'] > 0 and (not cone_start or cone_done):
                 cx_yellow = int(M_yellow['m10'] / M_yellow['m00'])
@@ -139,18 +155,19 @@ def start():
                 # 노란 점선이 화면의 오른쪽 → 왼쪽 흰선 사용
                 if cx_yellow > center_image:
                     selected_white_mask = white_mask[:, :center_image]
-
                     offset = 0
+
                     lane_left = True
+                # 노란 점선이 왼쪽 → 오른쪽 흰선 사용
                 else:
-                    # 노란 점선이 왼쪽 → 오른쪽 흰선 사용
                     selected_white_mask = white_mask[:, center_image:]
                     offset = center_image
+
                     lane_left = False
 
                 M_white = cv2.moments(selected_white_mask)
 
-                if M_white['m00'] > 0:
+                if M_white['m00'] > 0 and not lane_change:
                     cx_white = int(M_white['m10'] / M_white['m00']) + offset
 
                     # 노란 점선과 해당 흰선 사이의 중앙 계산
@@ -164,45 +181,40 @@ def start():
                 dists = np.array([round(d,1) for d in ranges])
                 if not cone_done:
                     if not ((dists[-20:] <= min_front_dist).any() or (dists[:20] <= min_front_dist).any()):
-                        print('no obstacle')
                         ang = 0
                         cone_cnt += 1
                         if cone_cnt > 10 and cone_start: cone_done = True
                     elif (dists[min_left:max_left] <= min_lr_dist).any():
-                        spd = 8
+                        spd = basic_spd / 3
                         cone_cnt = 0
                         if not (dists[min_right:max_right] <= min_lr_dist).any():
-                            print('just left obstacle')
                             if ang < 0: ang = 0
                             ang = min(ang + angle_increment, 100)
                         else: 
                             if min(dists[min_right:max_right]) < min(dists[min_left:max_left]):
-                                print('near right obstacle')
                                 if ang > 0: ang = 0
                                 ang = max(ang - angle_increment, -100)
                             else:
-                                print('near left obstacle')
                                 if ang < 0: ang = 0
                                 ang = min(ang + angle_increment, 100)
                     elif (dists[min_right:max_right] <= min_lr_dist).any():
-                        print('just right obstacle')
-                        spd = 8
+                        spd = basic_spd / 3
                         cone_cnt = 0
                         if ang > 0: ang = 0
                         ang = max(ang - angle_increment, -100)
                     else:
-                        print('front obstacle')
                         cone_start = True
                         cone_cnt = 0
-
-                elif sum(dists[-10:] <= 15) + sum(dists[:10] <= 15) >= 5:
-                    if lane_left and sum(dists[265:330] <= 10) < 3:
-                        ang = 45
-                    elif not lane_left and sum(dists[30:95] <= 10) < 3:
-                        ang = -45
+                elif sum(dists[-15:] <= 25) + sum(dists[:15] <= 25) >= 5:
+                    if sum(dists[265:330] <= 10) < 3 and lane_left or sum(dists[30:95] <= 10) < 3 and not lane_left:
+                        if not lane_change and not lc_done:
+                            print('lane change')
+                            lane_before = lane_left
+                        lane_change = 1
                     else:
-                        spd = 0
-            
+                        if lane_change:
+                            print('stop change')
+                        lane_change = 0
         drive(angle=ang, speed=spd)
         time.sleep(0.1)
         
