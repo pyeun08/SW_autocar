@@ -13,7 +13,7 @@ from xycar_msgs.msg import XycarMotor
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, LaserScan
 import matplotlib.pyplot as plt
-import argparse
+from collections import deque
 
 #=============================================
 # 프로그램에서 사용할 변수, 저장공간 선언부
@@ -90,6 +90,7 @@ def start():
     lc_done = False
     cone_start = False
     cone_done = False
+    avg_err = deque(maxlen=10)
 
     #=========================================
     # ang -> 핸들 조향각(실제로 넘겨줄 값)
@@ -104,7 +105,7 @@ def start():
     
     while not rospy.is_shutdown():
         height, width, _ = image.shape
-
+        
         # ROI 설정 (하단 40%만 사용)
         roi = image[int(height * 0.6):, :]
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
@@ -172,23 +173,33 @@ def start():
                     # 노란 점선과 해당 흰선 사이의 중앙 계산
                     center_x = (cx_yellow + cx_white) // 2
                     error = center_x - center_image
+                    print(error)
+                    
                     if not lane_change:
-                        if abs(error) < 10:
-                            spd *= 2.5
-                        elif abs(error) < 30:
-                            spd *= 2
-                        elif abs(error) < 50:
-                            spd *= 1.5
+                        if abs(error) > 50:
+                            if avg_err:
+                                avg_err.clear()
+                        else: 
+                            avg_err.append(abs(error))
+                        
+                        if len(avg_err) == 10:
+                            print(error, np.mean(avg_err))
+                            if np.mean(avg_err) < 20:
+                                spd *= 2.5
+                            elif np.mean(avg_err) < 35:
+                                spd *= 2
+                            elif np.mean(avg_err) < 50:
+                                spd *= 1.5
                     # 조향 명령 설정
                     ang = (float(error) / 100) * 55
 
             if ranges is not None:
                 dists = np.array([round(d,1) for d in ranges])
-                if not cone_done:
+                if not cone_done: 
                     if not ((dists[-20:] <= min_front_dist).any() or (dists[:20] <= min_front_dist).any()):
                         ang = 0
                         cone_cnt += 1
-                        if cone_cnt > 7 and cone_start: cone_done = True
+                        if cone_cnt > 10 and cone_start: cone_done = True
                     elif (dists[min_left:max_left] <= min_lr_dist).any():
                         spd = basic_spd / 3
                         cone_cnt = 0
