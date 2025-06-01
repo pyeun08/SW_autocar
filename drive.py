@@ -83,7 +83,7 @@ def start():
     min_left, max_left = 10, 55
     min_right, max_right = 305, 350
     min_lr_dist = 4
-    min_front_dist = 10
+    min_front_dist = 8
     green_light = False
     lane_left = True
     lane_change = False
@@ -138,16 +138,15 @@ def start():
             if lane_change:
                 if lane_before != lane_left:
                     lane_change = False
-                    lc_done = True
                 
                 if lane_change:
                     lane_before = lane_left
-                    spd *= 1.7
+                    spd *= 2
 
                     if lane_left:
-                        ang = 55
+                        ang = 30
                     else: 
-                        ang = -55
+                        ang = -30
 
             if M_yellow['m00'] > 0 and (not cone_start or cone_done):
                 cx_yellow = int(M_yellow['m10'] / M_yellow['m00'])
@@ -173,9 +172,15 @@ def start():
                     # 노란 점선과 해당 흰선 사이의 중앙 계산
                     center_x = (cx_yellow + cx_white) // 2
                     error = center_x - center_image
-
+                    if not lane_change:
+                        if abs(error) < 10:
+                            spd *= 2.5
+                        elif abs(error) < 30:
+                            spd *= 2
+                        elif abs(error) < 50:
+                            spd *= 1.5
                     # 조향 명령 설정
-                    ang = (float(error) / 100) * 40
+                    ang = (float(error) / 100) * 55
 
             if ranges is not None:
                 dists = np.array([round(d,1) for d in ranges])
@@ -183,7 +188,7 @@ def start():
                     if not ((dists[-20:] <= min_front_dist).any() or (dists[:20] <= min_front_dist).any()):
                         ang = 0
                         cone_cnt += 1
-                        if cone_cnt > 10 and cone_start: cone_done = True
+                        if cone_cnt > 7 and cone_start: cone_done = True
                     elif (dists[min_left:max_left] <= min_lr_dist).any():
                         spd = basic_spd / 3
                         cone_cnt = 0
@@ -205,9 +210,9 @@ def start():
                     else:
                         cone_start = True
                         cone_cnt = 0
-                elif sum(dists[-15:] <= 25) + sum(dists[:15] <= 25) >= 5:
+                elif sum(dists[-15:] <= 15) + sum(dists[:15] <= 15) >= 5:
                     if sum(dists[265:330] <= 10) < 3 and lane_left or sum(dists[30:95] <= 10) < 3 and not lane_left:
-                        if not lane_change and not lc_done:
+                        if not lane_change:
                             print('lane change')
                             lane_before = lane_left
                         lane_change = 1
