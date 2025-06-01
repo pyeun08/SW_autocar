@@ -15,27 +15,30 @@ def obstacle_dector(dists,spd,ang,lane_left):
 
     if lane_change:
         if lane_before != lane_left:
+            print('change success')
             lane_change = False
         
         if lane_change:
             lane_before = lane_left
-            spd *= 2
+            spd *= 2.2
 
             if lane_left:
                 ang = 30
             else: 
                 ang = -30
 
-    if sum(dists[-15:] <= 15) + sum(dists[:15] <= 15) >= 5:
-
-        if sum(dists[265:330] <= 5) < 3 and lane_left or sum(dists[30:95] <= 5) < 3 and not lane_left:
+    elif sum(dists[-15:] <= 15) + sum(dists[:15] <= 15) >= 5:
+        if sum(dists[-15:] <= 5) + sum(dists[:15] <= 5) >= 10:
+            spd = 0
+            print('stop!')
+        elif sum(dists[265:330] <= 10) < 3 and lane_left or sum(dists[30:95] <= 10) < 3 and not lane_left:
             if not lane_change:
                 print('lane change')
                 lane_before = lane_left
             lane_change = 1
         else:
             if lane_change:
-                print('stop change')
+                print('change fail')
             lane_change = 0
 
     return spd, ang , lane_change

@@ -12,7 +12,6 @@ basic_spd = 25
 avg_err = deque(maxlen=10)
 
 def lane_follower(image, spd,ang, cone_start,cone_done,lane_change):
-
     global lane_left
     global basic_spd
     global avg_err
@@ -61,6 +60,8 @@ def lane_follower(image, spd,ang, cone_start,cone_done,lane_change):
             # 노란 점선과 해당 흰선 사이의 중앙 계산
             center_x = (cx_yellow + cx_white) // 2
             error = center_x - center_image
+            print(error)
+            
             if not lane_change:
                 if abs(error) > 50:
                     if len(avg_err) > 3:
